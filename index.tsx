@@ -11,6 +11,7 @@ let ai: GoogleGenAI;
 let currentPostOptions: PostContent[] | null = null;
 let selectedImageIndex = 0;
 let imageGenerations: Map<number, { versions: string[], currentIndex: number }> = new Map();
+let nanoBananaApiCallCount = 0;
 
 
 // --- Main form elements ---
@@ -20,6 +21,7 @@ const watermarkInput = document.getElementById('watermark-input') as HTMLInputEl
 const generateButton = document.getElementById('generate-button') as HTMLButtonElement;
 const loadingIndicator = document.getElementById('loading-container') as HTMLDivElement;
 const loadingText = document.getElementById('loading-text') as HTMLParagraphElement;
+const apiCounter = document.getElementById('api-counter') as HTMLSpanElement;
 
 // --- Output elements ---
 const outputContainer = document.getElementById('results-container') as HTMLDivElement;
@@ -134,6 +136,7 @@ Your caption MUST:
 document.addEventListener('DOMContentLoaded', () => {
     ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     loadSettings();
+    updateApiCounterDisplay();
 });
 
 form.addEventListener('submit', handleSubmit);
@@ -183,27 +186,33 @@ async function handleSubmit(e: Event) {
     currentPostOptions = null;
     selectedImageIndex = 0;
     imageGenerations.clear();
+    nanoBananaApiCallCount = 0;
+    updateApiCounterDisplay();
     outputContainer.classList.add('hidden');
     imagePreviewContainer.classList.add('hidden');
     copyButton.disabled = true;
     savePdfButton.disabled = true;
+    captionTextEl.innerHTML = `Select an image above to see the caption.`;
 
     try {
-        setLoadingState(true, 'Step 1/3: Crafting 5 viral concepts...');
+        setLoadingState(true, 'Step 1/2: Crafting 5 viral concepts...');
         const postContentArray = await generatePostContent(ideaInput.value);
         currentPostOptions = postContentArray;
 
+        // Immediately show the output container with skeleton loaders
         setupImagePlaceholders();
-
-        loadingText.textContent = 'Step 2/3: Generating your stunning visuals...';
-        const imagePromises = currentPostOptions.map((content, index) => generateImage(content, index));
-        const captionPromise = generateCaption(currentPostOptions[0]); // Pre-generate caption for the first image
-
-        const [caption] = await Promise.all([captionPromise, ...imagePromises]);
-        
-        loadingText.textContent = 'Step 3/3: Finalizing the post...';
-        displayCaption(caption);
         outputContainer.classList.remove('hidden');
+
+        setLoadingState(true, 'Step 2/2: Generating visuals & caption...');
+
+        // Fire and forget image generation. `generateImage` will update the UI for each.
+        currentPostOptions.forEach((content, index) => generateImage(content, index));
+        
+        // Generate and wait for the caption for the first image
+        const caption = await generateCaption(currentPostOptions[0]);
+        displayCaption(caption);
+        
+        // Enable buttons once caption is ready
         copyButton.disabled = false;
         savePdfButton.disabled = false;
 
@@ -212,6 +221,7 @@ async function handleSubmit(e: Event) {
         console.error("An error occurred:", error);
         alert(`An error occurred: ${error.message}`);
     } finally {
+        // Hide the main loading spinner. Individual skeletons will remain.
         setLoadingState(false);
     }
 }
@@ -261,7 +271,9 @@ async function generateCaption(postContent: PostContent): Promise<string> {
 }
 
 async function generateImage(postContent: PostContent, index: number): Promise<void> {
-     const combinedPrompt = `${postContent.image_prompt}. The image must prominently feature the following text, styled beautifully and legibly. Header: "${postContent.header_text}". Subheader: "${postContent.subheader_text}".`;
+    nanoBananaApiCallCount++;
+    updateApiCounterDisplay();
+    const combinedPrompt = `${postContent.image_prompt}. The image must prominently feature the following text, styled beautifully and legibly. Header: "${postContent.header_text}". Subheader: "${postContent.subheader_text}".`;
     try {
         const response = await ai.models.generateContent({
             model: 'gemini-2.5-flash-image',
@@ -272,11 +284,16 @@ async function generateImage(postContent: PostContent, index: number): Promise<v
                 responseModalities: [Modality.IMAGE],
             },
         });
-        if (response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data) {
-            const base64Image = response.candidates[0].content.parts[0].inlineData.data;
+        
+        const imagePart = response.candidates?.[0]?.content?.parts?.find(part => part.inlineData);
+
+        if (imagePart?.inlineData?.data) {
+            const base64Image = imagePart.inlineData.data;
             displayImage(base64Image, index);
         } else {
-            console.error(`No image data received for option ${index + 1}.`);
+            const finishReason = response.candidates?.[0]?.finishReason;
+            const safetyRatings = response.candidates?.[0]?.safetyRatings;
+            console.error(`No image data received for option ${index + 1}.`, { finishReason, safetyRatings, response });
             displayError(`No image data`, index);
         }
     } catch (error) {
@@ -310,12 +327,23 @@ function displayCaption(caption: string) {
 function setupImagePlaceholders() {
     postOptionsGrid.innerHTML = '';
     for (let i = 0; i < 5; i++) {
-        const placeholder = document.createElement('div');
-        placeholder.className = 'post-image-wrapper loading-placeholder';
-        placeholder.dataset.index = i.toString();
-        placeholder.innerHTML = `<div class="spinner"></div><span>Option ${i+1}</span>`;
-        placeholder.addEventListener('click', () => handleImageSelect(i));
-        postOptionsGrid.appendChild(placeholder);
+        const wrapper = document.createElement('div');
+        wrapper.className = 'post-image-wrapper';
+        wrapper.dataset.index = i.toString();
+        
+        const skeleton = document.createElement('div');
+        skeleton.className = 'skeleton-loader';
+        skeleton.setAttribute('role', 'status');
+        skeleton.innerHTML = `
+            <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 16 20">
+                <path d="M5 5V.13a2.96 2.96 0 0 0-1.293.749L.879 3.707A2.98 2.98 0 0 0 .13 5H5Z"/>
+                <path d="M14.066 0H7v5a2 2 0 0 1-2 2H0v11a1.97 1.97 0 0 0 1.934 2h12.132A1.97 1.97 0 0 0 16 18V2a1.97 1.97 0 0 0-1.934-2ZM9 13a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-2a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2Zm4 .382a1 1 0 0 1-1.447.894L10 13v-2l1.553-1.276a1 1 0 0 1 1.447.894v2.764Z"/>
+            </svg>
+            <span class="sr-only">Loading...</span>`;
+        
+        wrapper.appendChild(skeleton);
+        wrapper.addEventListener('click', () => handleImageSelect(i));
+        postOptionsGrid.appendChild(wrapper);
     }
     // Select the first one by default
     postOptionsGrid.children[0]?.classList.add('selected');
@@ -327,9 +355,8 @@ function renderImageThumbnail(index: number) {
 
     if (!container || !imageData || !currentPostOptions) return;
 
-    container.innerHTML = ''; // Clear spinner/previous content
-    container.classList.remove('loading-placeholder');
-
+    container.innerHTML = ''; // Clear spinner/skeleton content
+    
     const { versions, currentIndex } = imageData;
     const currentImageSrc = versions[currentIndex];
 
@@ -438,7 +465,6 @@ function displayImage(base64Image: string, index: number) {
 function displayError(message: string, index: number) {
     const container = postOptionsGrid.querySelector(`[data-index="${index}"]`);
     if (container) {
-        container.classList.remove('loading-placeholder');
         container.innerHTML = `<div class="error-message">${message}</div>`;
     }
 }
@@ -474,7 +500,9 @@ async function handleImageSelect(index: number) {
         const currentImageSrc = imageData.versions[imageData.currentIndex];
         updateImagePreview(currentImageSrc, `Generated image for: ${currentPostOptions[index].header_text}`, index);
     } else {
-        imagePreviewContainer.classList.add('hidden');
+        // If image data is not ready yet, don't hide the preview container, 
+        // just wait for it to be generated.
+        return; 
     }
 
     selectedImageIndex = index;
@@ -711,5 +739,11 @@ function handleSaveAsPdf() {
         doPrint();
     } else {
         img.onload = doPrint;
+    }
+}
+
+function updateApiCounterDisplay() {
+    if (apiCounter) {
+        apiCounter.textContent = nanoBananaApiCallCount.toString();
     }
 }
