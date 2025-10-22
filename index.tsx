@@ -292,11 +292,11 @@ function setLoadingState(isLoading: boolean, message: string = '') {
         loadingIndicator.classList.remove('hidden');
         loadingText.textContent = message;
         generateButton.disabled = true;
-        generateButton.textContent = 'Generating...';
+        generateButton.querySelector('span')!.textContent = 'Generating...';
     } else {
         loadingIndicator.classList.add('hidden');
         generateButton.disabled = false;
-        generateButton.textContent = 'Generate';
+        generateButton.querySelector('span')!.textContent = 'Generate';
     }
 }
 
