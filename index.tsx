@@ -6,12 +6,14 @@ interface PostContent {
   subheader_text: string;
 }
 
+// --- Constants ---
+const API_COUNT_STORAGE_KEY = 'nanoBananaApiCountData';
+
 // --- Global State ---
 let ai: GoogleGenAI;
 let currentPostOptions: PostContent[] | null = null;
 let selectedImageIndex = 0;
 let imageGenerations: Map<number, { versions: string[], currentIndex: number }> = new Map();
-let nanoBananaApiCallCount = 0;
 let initialImagesGeneratedCount = 0;
 let isInitialGeneration = false;
 
@@ -135,6 +137,46 @@ Your caption MUST:
 -   Be formatted with line breaks for readability.`;
 
 
+// --- API Count Management ---
+function getISTDateString(): string {
+    const now = new Date();
+    // en-CA format is YYYY-MM-DD which is perfect for comparison
+    return new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Kolkata',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+    }).format(now);
+}
+
+function getApiCountData(): { count: number; lastReset: string } {
+    const storedData = localStorage.getItem(API_COUNT_STORAGE_KEY);
+    const todayIST = getISTDateString();
+    if (storedData) {
+        try {
+            const data = JSON.parse(storedData);
+            // Check if data has the expected shape and lastReset is the current day in IST
+            if (data && typeof data.count === 'number' && data.lastReset === todayIST) {
+                return data;
+            }
+        } catch (e) {
+            console.error("Error parsing API count data from localStorage", e);
+            // If parsing fails, fall through to reset
+        }
+    }
+    // If no data, data is malformed, or date is old, reset
+    const newData = { count: 0, lastReset: todayIST };
+    localStorage.setItem(API_COUNT_STORAGE_KEY, JSON.stringify(newData));
+    return newData;
+}
+
+function incrementApiCount(): void {
+    const data = getApiCountData();
+    data.count++;
+    localStorage.setItem(API_COUNT_STORAGE_KEY, JSON.stringify(data));
+}
+
+
 // --- Event Listeners ---
 document.addEventListener('DOMContentLoaded', () => {
     ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
@@ -189,7 +231,6 @@ async function handleSubmit(e: Event) {
     currentPostOptions = null;
     selectedImageIndex = 0;
     imageGenerations.clear();
-    nanoBananaApiCallCount = 0;
     initialImagesGeneratedCount = 0;
     isInitialGeneration = true;
     updateApiCounterDisplay();
@@ -276,7 +317,7 @@ async function generateCaption(postContent: PostContent): Promise<string> {
 }
 
 async function generateImage(postContent: PostContent, index: number): Promise<void> {
-    nanoBananaApiCallCount++;
+    incrementApiCount();
     updateApiCounterDisplay();
     const combinedPrompt = `${postContent.image_prompt}. The image must prominently feature the following text, styled beautifully and legibly. Header: "${postContent.header_text}". Subheader: "${postContent.subheader_text}".`;
     try {
@@ -765,6 +806,7 @@ function handleSaveAsPdf() {
 
 function updateApiCounterDisplay() {
     if (apiCounter) {
-        apiCounter.textContent = nanoBananaApiCallCount.toString();
+        const { count } = getApiCountData();
+        apiCounter.textContent = count.toString();
     }
 }
