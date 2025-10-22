@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Viral Post Generator</title>
+    <link rel="stylesheet" href="index.css" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap"
+      rel="stylesheet"
+    />
+  <script type="importmap">
+{
+  "imports": {
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.25.0"
+  }
+}
+</script>
+</head>
+  <body>
+    <main>
+      <header>
+        <h1>Viral Post Generator</h1>
+        <p>
+          Turn your idea into 5 scroll-stopping social media post options with unique AI-generated images
+          and captions.
+        </p>
+         <button id="settings-button" title="Open Settings">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+          </button>
+      </header>
+
+      <form id="idea-form">
+        <div class="form-group">
+            <label for="idea-input">Enter your post topic or idea:</label>
+            <textarea
+            id="idea-input"
+            name="idea"
+            rows="3"
+            placeholder="e.g., 'A motivational quote about persistence' or 'An ad for a new coffee blend'"
+            required
+            ></textarea>
+        </div>
+        <div class="form-group">
+            <label for="watermark-input">Add a watermark (optional):</label>
+            <input type="text" id="watermark-input" name="watermark" placeholder="e.g., Your Name or @yourhandle" />
+        </div>
+        <button type="submit" id="generate-button">
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-zap"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+          Generate
+        </button>
+      </form>
+
+      <section id="loading-container" class="hidden" aria-live="polite">
+        <div class="spinner"></div>
+        <p id="loading-text">Starting the creative process...</p>
+      </section>
+
+      <section id="error-container" class="hidden" aria-live="assertive">
+        <p id="error-text"></p>
+      </section>
+
+      <section id="results-container" class="hidden">
+        <div class="results-header">
+            <h2>Your Post Options</h2>
+        </div>
+        <p class="instructions">Hover over an image for options. Click to select and view its caption.</p>
+        <div id="post-options-grid">
+          <!-- Image options will be injected here -->
+        </div>
+
+        <div id="image-preview-container" class="hidden">
+            <img id="preview-image" src="" alt="Selected post preview" />
+            <div id="preview-overlay">
+                <div class="preview-nav-controls hidden">
+                    <button id="preview-prev-btn" class="preview-control-btn" title="Previous Version">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                    </button>
+                    <button id="preview-next-btn" class="preview-control-btn" title="Next Version">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                    </button>
+                </div>
+                <div class="preview-action-controls">
+                     <button id="preview-prompt-btn" class="preview-control-btn" title="View & Edit Prompt">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                    </button>
+                    <button id="preview-regen-btn" class="preview-control-btn" title="Regenerate Image">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+                    </button>
+                    <button id="preview-download-btn" class="preview-control-btn" title="Download Image">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <h2>Engaging Caption</h2>
+        <div id="caption-container">
+          <div id="caption-text-wrapper">
+             <div id="caption-text">Select an image above to see the caption.</div>
+             <div id="caption-loader" class="hidden">
+                <div class="spinner"></div>
+                <span>Generating new caption...</span>
+             </div>
+          </div>
+          <div class="caption-actions">
+            <button id="save-pdf-button" title="Save as PDF">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                <span>Save as PDF</span>
+            </button>
+            <button id="copy-button" title="Copy caption">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                <span>Copy</span>
+            </button>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <div id="settings-modal-overlay" class="modal-overlay hidden">
+      <div id="settings-modal" class="modal-content" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+        <div class="modal-header">
+          <h2 id="settings-title">Settings</h2>
+          <button id="close-settings-button" title="Close Settings">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div class="form-group">
+                <div class="label-with-help">
+                    <label for="image-prompt-input">Image Prompt System Instruction</label>
+                    <button class="help-button" aria-describedby="image-prompt-tooltip">?</button>
+                    <div id="image-prompt-tooltip" class="tooltip" role="tooltip">
+                      <strong>What this does:</strong> This instruction guides the AI (Gemini 2.5 Pro) to generate 5 distinct image prompts and text overlays for our image model (Nano Banana).<br><br>
+                      <strong>How to prompt:</strong> Clearly define the AI's persona (e.g., "You are an expert viral marketer"). Specify the exact JSON output format you need (an array of 5 objects). Provide a clear example of a good result. The more detailed your instruction, the better the result.
+                    </div>
+                </div>
+              <textarea id="image-prompt-input" class="settings-textarea" rows="10"></textarea>
+            </div>
+            <div class="form-group">
+                <div class="label-with-help">
+                  <label for="caption-prompt-input">Caption System Instruction</label>
+                  <button class="help-button" aria-describedby="caption-prompt-tooltip">?</button>
+                  <div id="caption-prompt-tooltip" class="tooltip" role="tooltip">
+                    <strong>What this does:</strong> This instruction tells the AI how to write a compelling Instagram caption based on the post content it just created.<br><br>
+                    <strong>How to prompt:</strong> Define the persona (e.g., "You are an expert Instagram Caption Agent"). List the key qualities of a good caption (e.g., Strong Hook, Call-to-Action). Set rules for the output, such as word count and including hashtags.
+                  </div>
+                </div>
+              <textarea id="caption-prompt-input" class="settings-textarea" rows="10"></textarea>
+            </div>
+            <div class="form-group">
+              <label for="temperature-slider">Gemini 2.5 Pro Temperature</label>
+              <div class="range-slider-group">
+                <input type="range" id="temperature-slider" min="0" max="1" step="0.1">
+                <span id="temperature-value">0.9</span>
+              </div>
+              <p class="setting-description">Controls randomness. Lower values are more deterministic, higher values are more creative.</p>
+            </div>
+        </div>
+        <div class="modal-footer">
+          <button id="reset-settings-button" class="button-secondary">Reset to Defaults</button>
+          <button id="save-settings-button" class="button-primary">Save Changes</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="prompt-modal-overlay" class="modal-overlay hidden">
+      <div id="prompt-modal" class="modal-content" role="dialog" aria-modal="true" aria-labelledby="prompt-title">
+        <div class="modal-header">
+          <h2 id="prompt-title">Post Content Details</h2>
+          <button id="close-prompt-button" title="Close Prompt">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div class="prompt-section">
+                <label for="prompt-modal-header-input">Header Text</label>
+                <input type="text" id="prompt-modal-header-input" class="settings-textarea" />
+            </div>
+            <div class="prompt-section">
+                <label for="prompt-modal-subheader-input">Subheader Text</label>
+                <input type="text" id="prompt-modal-subheader-input" class="settings-textarea" />
+            </div>
+            <div class="prompt-section">
+                <label for="prompt-modal-image-prompt-input">Image Generation Prompt</label>
+                <textarea id="prompt-modal-image-prompt-input" class="settings-textarea" rows="8"></textarea>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button id="regenerate-with-prompt-button" class="button-primary">Save & Regenerate</button>
+        </div>
+      </div>
+    </div>
+
+    <script type="module" src="index.tsx"></script>
+  </body>
+</html>
