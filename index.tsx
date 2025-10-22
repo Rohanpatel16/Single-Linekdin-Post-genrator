@@ -12,6 +12,9 @@ let currentPostOptions: PostContent[] | null = null;
 let selectedImageIndex = 0;
 let imageGenerations: Map<number, { versions: string[], currentIndex: number }> = new Map();
 let nanoBananaApiCallCount = 0;
+let initialImagesGeneratedCount = 0;
+let isInitialGeneration = false;
+
 
 
 // --- Main form elements ---
@@ -187,6 +190,8 @@ async function handleSubmit(e: Event) {
     selectedImageIndex = 0;
     imageGenerations.clear();
     nanoBananaApiCallCount = 0;
+    initialImagesGeneratedCount = 0;
+    isInitialGeneration = true;
     updateApiCounterDisplay();
     outputContainer.classList.add('hidden');
     imagePreviewContainer.classList.add('hidden');
@@ -398,7 +403,8 @@ function renderImageThumbnail(index: number) {
     container.appendChild(overlay);
 
     // If this is the first image, set it as the initial preview
-    if (index === 0 && versions.length === 1) {
+    if (index === 0 && versions.length === 1 && isInitialGeneration) {
+        imagePreviewContainer.classList.add('shine-effect');
         updateImagePreview(img.src, img.alt, index);
     }
 }
@@ -419,6 +425,15 @@ function displayImage(base64Image: string, index: number) {
         container?.querySelector('.thumbnail-loader')?.remove();
 
         renderImageThumbnail(index);
+        
+        if (isInitialGeneration) {
+            initialImagesGeneratedCount++;
+            if (initialImagesGeneratedCount >= 5) {
+                imagePreviewContainer.classList.remove('shine-effect');
+                isInitialGeneration = false;
+            }
+        }
+
 
         // If the newly generated image belongs to the currently selected option,
         // update the main preview to show the new version immediately.
