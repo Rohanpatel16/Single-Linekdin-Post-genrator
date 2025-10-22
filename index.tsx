@@ -419,6 +419,12 @@ function displayImage(base64Image: string, index: number) {
         container?.querySelector('.thumbnail-loader')?.remove();
 
         renderImageThumbnail(index);
+
+        // If the newly generated image belongs to the currently selected option,
+        // update the main preview to show the new version immediately.
+        if (index === selectedImageIndex && currentPostOptions) {
+            updateImagePreview(imageSrc, `Generated image for: ${currentPostOptions[index].header_text}`, index);
+        }
     };
 
     if (!watermarkText) {
