@@ -460,16 +460,23 @@ async function renderImageThumbnail(index: number) {
 
     if (!container || !imageData || !currentPostOptions) return;
 
-    container.innerHTML = ''; // Clear spinner/skeleton content
-    
     const { versions, currentIndex } = imageData;
     const originalImageSrc = versions[currentIndex];
     const processedImageSrc = await processImage(originalImageSrc);
 
-    // Add image
-    const img = document.createElement('img');
+    // Preload and decode the image in memory to prevent flicker
+    const img = new Image();
     img.src = processedImageSrc;
     img.alt = `Generated image for: ${currentPostOptions?.[index]?.header_text}`;
+    try {
+        await img.decode();
+    } catch (e) {
+        console.error(`Image decoding failed for thumbnail ${index}:`, e);
+        // If decoding fails, we can still try to display it and let the browser handle it.
+    }
+
+    // Now that the image is ready, update the DOM
+    container.innerHTML = ''; // Clear spinner/skeleton content
     container.appendChild(img);
 
     // Add overlay with controls
@@ -553,8 +560,19 @@ async function rerenderMainPreview() {
     
     const originalSrc = imageData.versions[imageData.currentIndex];
     const altText = `Preview for: ${currentPostOptions[selectedImageIndex].header_text}`;
+    const processedSrc = await processImage(originalSrc);
 
-    previewImage.src = await processImage(originalSrc);
+    // Preload and decode the new preview image before showing it to prevent flicker
+    const img = new Image();
+    img.src = processedSrc;
+    try {
+        await img.decode();
+    } catch(e) {
+        console.error("Image decoding failed for main preview:", e);
+    }
+    
+    // Now swap it in
+    previewImage.src = img.src;
     previewImage.alt = altText;
     imagePreviewContainer.classList.remove('hidden');
 
