@@ -8,6 +8,7 @@ interface PostContent {
 
 // --- Constants ---
 const API_COUNT_STORAGE_KEY = 'nanoBananaApiCountData';
+const CANVAS_TARGET_SIZE = 1080;
 
 // --- Global State ---
 let ai: GoogleGenAI;
@@ -17,16 +18,33 @@ let imageGenerations: Map<number, { versions: string[], currentIndex: number }> 
 let initialImagesGeneratedCount = 0;
 let isInitialGeneration = false;
 
-
+// --- Branding State ---
+let brandingText: string = '';
+let brandingLogoBase64: string | null = null;
+let brandingSize: number = 8;
+let brandingOpacity: number = 0.7;
+let brandingPosition: { x: number, y: number } = { x: 20, y: 20 }; // Position on the 1080px canvas
+let isDragging = false;
+let dragStartOffset = { x: 0, y: 0 };
 
 // --- Main form elements ---
 const form = document.getElementById('idea-form') as HTMLFormElement;
 const ideaInput = document.getElementById('idea-input') as HTMLInputElement;
-const watermarkInput = document.getElementById('watermark-input') as HTMLInputElement;
 const generateButton = document.getElementById('generate-button') as HTMLButtonElement;
 const loadingIndicator = document.getElementById('loading-container') as HTMLDivElement;
 const loadingText = document.getElementById('loading-text') as HTMLParagraphElement;
 const apiCounter = document.getElementById('api-counter') as HTMLSpanElement;
+
+// --- Branding Editor Elements ---
+const brandingEditor = document.getElementById('branding-editor') as HTMLElement;
+const brandingTextInput = document.getElementById('branding-text-input') as HTMLInputElement;
+const brandingLogoInput = document.getElementById('branding-logo-input') as HTMLInputElement;
+const brandingLogoLabel = document.getElementById('branding-logo-label') as HTMLLabelElement;
+const brandingLogoPreviewWrapper = document.getElementById('branding-logo-preview-wrapper') as HTMLDivElement;
+const brandingLogoPreview = document.getElementById('branding-logo-preview') as HTMLImageElement;
+const brandingRemoveLogoButton = document.getElementById('branding-remove-logo-button') as HTMLButtonElement;
+const brandingSizeSlider = document.getElementById('branding-size-slider') as HTMLInputElement;
+const brandingOpacitySlider = document.getElementById('branding-opacity-slider') as HTMLInputElement;
 
 // --- Output elements ---
 const outputContainer = document.getElementById('results-container') as HTMLDivElement;
@@ -46,6 +64,7 @@ const previewNextBtn = document.getElementById('preview-next-btn') as HTMLButton
 const previewRegenBtn = document.getElementById('preview-regen-btn') as HTMLButtonElement;
 const previewDownloadBtn = document.getElementById('preview-download-btn') as HTMLButtonElement;
 const previewPromptBtn = document.getElementById('preview-prompt-btn') as HTMLButtonElement;
+const previewEditBrandingBtn = document.getElementById('preview-edit-branding-btn') as HTMLButtonElement;
 
 // --- Prompt Modal Elements ---
 const promptModalOverlay = document.getElementById('prompt-modal-overlay') as HTMLDivElement;
@@ -55,6 +74,13 @@ const promptModalSubheaderInput = document.getElementById('prompt-modal-subheade
 const promptModalImagePromptInput = document.getElementById('prompt-modal-image-prompt-input') as HTMLTextAreaElement;
 const regenerateWithPromptButton = document.getElementById('regenerate-with-prompt-button') as HTMLButtonElement;
 
+// --- Branding Editor Modal Elements ---
+const brandingEditorModalOverlay = document.getElementById('branding-editor-modal-overlay') as HTMLDivElement;
+const closeBrandingEditorButton = document.getElementById('close-branding-editor-button') as HTMLButtonElement;
+const saveBrandingPositionButton = document.getElementById('save-branding-position-button') as HTMLButtonElement;
+const brandingEditorPreviewContainer = document.getElementById('branding-editor-preview-container') as HTMLDivElement;
+const brandingEditorPreviewImage = document.getElementById('branding-editor-preview-image') as HTMLImageElement;
+const brandingEditorOverlayElement = document.getElementById('branding-editor-overlay-element') as HTMLDivElement;
 
 // --- Settings Modal Elements ---
 const settingsButton = document.getElementById('settings-button') as HTMLButtonElement;
@@ -182,6 +208,8 @@ document.addEventListener('DOMContentLoaded', () => {
     ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     loadSettings();
     updateApiCounterDisplay();
+    initializeBrandingControls();
+    initializeBrandingEditorModal();
 });
 
 form.addEventListener('submit', handleSubmit);
@@ -194,6 +222,7 @@ previewNextBtn.addEventListener('click', (e) => handleNavigateVersion(e, selecte
 previewRegenBtn.addEventListener('click', (e) => handleRegenerateImage(e, selectedImageIndex));
 previewDownloadBtn.addEventListener('click', handlePreviewDownload);
 previewPromptBtn.addEventListener('click', handleShowPrompt);
+previewEditBrandingBtn.addEventListener('click', openBrandingEditorModal);
 
 // Prompt Modal Listeners
 closePromptButton.addEventListener('click', closePromptModal);
@@ -203,6 +232,15 @@ promptModalOverlay.addEventListener('click', (e) => {
     }
 });
 regenerateWithPromptButton.addEventListener('click', handleRegenerateWithEditedPrompt);
+
+// Branding Editor Modal Listeners
+closeBrandingEditorButton.addEventListener('click', closeBrandingEditorModal);
+brandingEditorModalOverlay.addEventListener('click', (e) => {
+    if (e.target === brandingEditorModalOverlay) {
+        closeBrandingEditorModal();
+    }
+});
+saveBrandingPositionButton.addEventListener('click', handleSaveBrandingPosition);
 
 
 // Settings Modal Listeners
@@ -220,6 +258,15 @@ temperatureSlider.addEventListener('input', () => {
 });
 
 // --- Main Functions ---
+function checkInitialGenerationComplete() {
+    if (isInitialGeneration) {
+        initialImagesGeneratedCount++;
+        if (initialImagesGeneratedCount >= 5) {
+            isInitialGeneration = false;
+        }
+    }
+}
+
 async function handleSubmit(e: Event) {
     e.preventDefault();
     if (!ideaInput.value.trim()) {
@@ -235,6 +282,7 @@ async function handleSubmit(e: Event) {
     isInitialGeneration = true;
     updateApiCounterDisplay();
     outputContainer.classList.add('hidden');
+    brandingEditor.classList.add('hidden');
     imagePreviewContainer.classList.add('hidden');
     copyButton.disabled = true;
     savePdfButton.disabled = true;
@@ -248,6 +296,8 @@ async function handleSubmit(e: Event) {
         // Immediately show the output container with skeleton loaders
         setupImagePlaceholders();
         outputContainer.classList.remove('hidden');
+        brandingEditor.classList.remove('hidden');
+
 
         setLoadingState(true, 'Step 2/2: Generating visuals & caption...');
 
@@ -335,16 +385,25 @@ async function generateImage(postContent: PostContent, index: number): Promise<v
 
         if (imagePart?.inlineData?.data) {
             const base64Image = imagePart.inlineData.data;
-            displayImage(base64Image, index);
+            await displayImage(base64Image, index);
         } else {
             const finishReason = response.candidates?.[0]?.finishReason;
             const safetyRatings = response.candidates?.[0]?.safetyRatings;
             console.error(`No image data received for option ${index + 1}.`, { finishReason, safetyRatings, response });
-            displayError(`No image data`, index);
+            
+            let errorMessage = 'No image data';
+            if (finishReason === 'SAFETY') {
+                errorMessage = 'Blocked by safety filters. Try editing the prompt.';
+            } else if (finishReason === 'NO_IMAGE') {
+                errorMessage = 'Generation failed. Please try again.';
+            }
+            displayError(errorMessage, index);
+            checkInitialGenerationComplete();
         }
     } catch (error) {
         console.error(`Error generating image ${index + 1}:`, error);
         displayError('API Error', index);
+        checkInitialGenerationComplete();
     }
 }
 
@@ -395,7 +454,7 @@ function setupImagePlaceholders() {
     postOptionsGrid.children[0]?.classList.add('selected');
 }
 
-function renderImageThumbnail(index: number) {
+async function renderImageThumbnail(index: number) {
     const container = postOptionsGrid.querySelector(`[data-index="${index}"]`) as HTMLDivElement;
     const imageData = imageGenerations.get(index);
 
@@ -404,11 +463,12 @@ function renderImageThumbnail(index: number) {
     container.innerHTML = ''; // Clear spinner/skeleton content
     
     const { versions, currentIndex } = imageData;
-    const currentImageSrc = versions[currentIndex];
+    const originalImageSrc = versions[currentIndex];
+    const processedImageSrc = await processImage(originalImageSrc);
 
     // Add image
     const img = document.createElement('img');
-    img.src = currentImageSrc;
+    img.src = processedImageSrc;
     img.alt = `Generated image for: ${currentPostOptions?.[index]?.header_text}`;
     container.appendChild(img);
 
@@ -445,105 +505,64 @@ function renderImageThumbnail(index: number) {
 
     // If this is the first image, set it as the initial preview
     if (index === 0 && versions.length === 1 && isInitialGeneration) {
-        imagePreviewContainer.classList.add('shine-effect');
-        updateImagePreview(img.src, img.alt, index);
+        await rerenderMainPreview();
     }
 }
 
-function displayImage(base64Image: string, index: number) {
-    const watermarkText = watermarkInput.value.trim();
+async function displayImage(base64Image: string, index: number) {
     const originalSrc = `data:image/png;base64,${base64Image}`;
 
-    const processAndRender = (imageSrc: string) => {
-        if (!imageGenerations.has(index)) {
-            imageGenerations.set(index, { versions: [], currentIndex: -1 });
-        }
-        const imageData = imageGenerations.get(index)!;
-        imageData.versions.push(imageSrc);
-        imageData.currentIndex = imageData.versions.length - 1;
-        
-        const container = postOptionsGrid.querySelector(`[data-index="${index}"]`);
-        container?.querySelector('.thumbnail-loader')?.remove();
+    if (!imageGenerations.has(index)) {
+        imageGenerations.set(index, { versions: [], currentIndex: -1 });
+    }
+    const imageData = imageGenerations.get(index)!;
+    imageData.versions.push(originalSrc);
+    imageData.currentIndex = imageData.versions.length - 1;
 
-        renderImageThumbnail(index);
-        
-        if (isInitialGeneration) {
-            initialImagesGeneratedCount++;
-            if (initialImagesGeneratedCount >= 5) {
-                imagePreviewContainer.classList.remove('shine-effect');
-                isInitialGeneration = false;
-            }
-        }
+    await renderImageThumbnail(index);
+    
+    checkInitialGenerationComplete();
 
-
-        // If the newly generated image belongs to the currently selected option,
-        // update the main preview to show the new version immediately.
-        if (index === selectedImageIndex && currentPostOptions) {
-            updateImagePreview(imageSrc, `Generated image for: ${currentPostOptions[index].header_text}`, index);
-        }
-    };
-
-    if (!watermarkText) {
-        processAndRender(originalSrc);
-    } else {
-        const sourceImage = new Image();
-        sourceImage.onload = () => {
-            const canvas = document.createElement('canvas');
-            const ctx = canvas.getContext('2d');
-            const targetSize = 1080;
-            canvas.width = targetSize;
-            canvas.height = targetSize;
-
-            if (!ctx) {
-                console.error("Canvas context not available, rendering image without watermark.");
-                processAndRender(originalSrc);
-                return;
-            }
-
-            ctx.drawImage(sourceImage, 0, 0, targetSize, targetSize);
-            const fontSize = targetSize * 0.025;
-            ctx.font = `600 ${fontSize}px Inter, sans-serif`;
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
-            ctx.textAlign = 'right';
-            ctx.textBaseline = 'bottom';
-            ctx.shadowColor = 'rgba(0, 0, 0, 0.7)';
-            ctx.shadowBlur = 5;
-            ctx.shadowOffsetX = 1;
-            ctx.shadowOffsetY = 1;
-            const padding = targetSize * 0.02;
-            ctx.fillText(watermarkText, canvas.width - padding, canvas.height - padding);
-
-            const watermarkedSrc = canvas.toDataURL('image/png');
-            processAndRender(watermarkedSrc);
-        };
-        sourceImage.onerror = () => {
-            console.error(`Failed to load image for watermarking at index ${index}.`);
-            displayError('Image Load Error', index);
-        };
-        sourceImage.src = originalSrc;
+    if (index === selectedImageIndex) {
+        await rerenderMainPreview();
     }
 }
+
 
 function displayError(message: string, index: number) {
     const container = postOptionsGrid.querySelector(`[data-index="${index}"]`);
     if (container) {
-        container.innerHTML = `<div class="error-message">${message}</div>`;
+        container.innerHTML = `<div class="error-message">
+            <span>${message}</span>
+            <button class="regen-btn-small" title="Regenerate Image">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+            </button>
+        </div>`;
+        container.querySelector('.regen-btn-small')?.addEventListener('click', (e) => handleRegenerateImage(e as MouseEvent, index));
     }
 }
 
-function updateImagePreview(src: string, alt: string, index: number) {
-    if (previewImage && imagePreviewContainer) {
-        previewImage.src = src;
-        previewImage.alt = alt.replace('Generated image for:', 'Preview for:');
-        imagePreviewContainer.classList.remove('hidden');
+async function rerenderMainPreview() {
+    if (!previewImage || !imagePreviewContainer || !currentPostOptions) return;
+    
+    const imageData = imageGenerations.get(selectedImageIndex);
+    if (!imageData || imageData.versions.length === 0) {
+        imagePreviewContainer.classList.add('hidden');
+        return;
+    };
+    
+    const originalSrc = imageData.versions[imageData.currentIndex];
+    const altText = `Preview for: ${currentPostOptions[selectedImageIndex].header_text}`;
 
-        // Update preview controls visibility
-        const imageData = imageGenerations.get(index);
-        if (imageData && imageData.versions.length > 1) {
-            previewNavControls.classList.remove('hidden');
-        } else {
-            previewNavControls.classList.add('hidden');
-        }
+    previewImage.src = await processImage(originalSrc);
+    previewImage.alt = altText;
+    imagePreviewContainer.classList.remove('hidden');
+
+    // Update nav controls
+    if (imageData.versions.length > 1) {
+        previewNavControls.classList.remove('hidden');
+    } else {
+        previewNavControls.classList.add('hidden');
     }
 }
 
@@ -556,18 +575,9 @@ async function handleImageSelect(index: number) {
     const newlySelected = postOptionsGrid.querySelector(`[data-index="${index}"]`);
     newlySelected?.classList.add('selected');
     
-    // Update the main preview image
-    const imageData = imageGenerations.get(index);
-    if (imageData) {
-        const currentImageSrc = imageData.versions[imageData.currentIndex];
-        updateImagePreview(currentImageSrc, `Generated image for: ${currentPostOptions[index].header_text}`, index);
-    } else {
-        // If image data is not ready yet, don't hide the preview container, 
-        // just wait for it to be generated.
-        return; 
-    }
-
     selectedImageIndex = index;
+
+    await rerenderMainPreview();
 
     // Fetch new caption
     captionLoader.classList.remove('hidden');
@@ -601,7 +611,7 @@ async function handleRegenerateImage(e: MouseEvent, index: number) {
     await generateImage(currentPostOptions[index], index);
 }
 
-function handleNavigateVersion(e: MouseEvent, index: number, direction: number) {
+async function handleNavigateVersion(e: MouseEvent, index: number, direction: number) {
     e.stopPropagation();
     const imageData = imageGenerations.get(index);
     if (!imageData || !currentPostOptions) return;
@@ -611,21 +621,26 @@ function handleNavigateVersion(e: MouseEvent, index: number, direction: number) 
     if (newIndex >= imageData.versions.length) newIndex = 0;
     
     imageData.currentIndex = newIndex;
-    renderImageThumbnail(index);
+    await renderImageThumbnail(index);
 
     if (index === selectedImageIndex) {
-         updateImagePreview(imageData.versions[newIndex], `Generated image for: ${currentPostOptions[index].header_text}`, index);
+         await rerenderMainPreview();
     }
 }
 
 
 // --- Preview and Prompt Modal Functions ---
 
-function handlePreviewDownload() {
+async function handlePreviewDownload() {
     if (!currentPostOptions) return;
-    const imageSrc = previewImage.src;
+    const imageData = imageGenerations.get(selectedImageIndex);
+    if (!imageData) return;
+
+    const originalImageSrc = imageData.versions[imageData.currentIndex];
+    const processedImageSrc = await processImage(originalImageSrc);
+
     const postContent = currentPostOptions[selectedImageIndex];
-    handleDownloadImage(imageSrc, postContent);
+    handleDownloadImage(processedImageSrc, postContent);
 }
 
 function handleShowPrompt() {
@@ -741,14 +756,15 @@ function handleDownloadImage(imageSrc: string, postContent: PostContent) {
     document.body.removeChild(link);
 }
 
-function handleSaveAsPdf() {
+async function handleSaveAsPdf() {
     const selectedImageData = imageGenerations.get(selectedImageIndex);
     if (!selectedImageData || !captionTextEl.innerText || !currentPostOptions) {
         alert('Please select an image and generate a caption first.');
         return;
     }
 
-    const imageSrc = selectedImageData.versions[selectedImageData.currentIndex];
+    const originalImageSrc = selectedImageData.versions[selectedImageData.currentIndex];
+    const imageSrc = await processImage(originalImageSrc);
     const captionHtml = captionTextEl.innerHTML;
     const topic = ideaInput.value;
     const header = currentPostOptions[selectedImageIndex].header_text;
@@ -809,4 +825,265 @@ function updateApiCounterDisplay() {
         const { count } = getApiCountData();
         apiCounter.textContent = count.toString();
     }
+}
+
+// --- Branding & Image Processing ---
+
+async function handleBrandingChange() {
+    await rerenderAllThumbnails();
+    await rerenderMainPreview();
+}
+
+function initializeBrandingControls() {
+    brandingTextInput.addEventListener('input', () => {
+        brandingText = brandingTextInput.value;
+        if (brandingText) {
+            brandingLogoBase64 = null; // Text overrides logo
+            clearLogoSelection();
+        }
+        handleBrandingChange();
+    });
+
+    brandingLogoInput.addEventListener('change', (e) => {
+        const target = e.target as HTMLInputElement;
+        const file = target.files?.[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                brandingLogoBase64 = event.target?.result as string;
+                brandingText = ''; // Logo overrides text
+                brandingTextInput.value = '';
+                
+                brandingLogoPreview.src = brandingLogoBase64;
+                brandingLogoPreviewWrapper.classList.remove('hidden');
+                brandingLogoLabel.classList.add('hidden');
+                
+                handleBrandingChange();
+            };
+            reader.readAsDataURL(file);
+        }
+    });
+
+    brandingRemoveLogoButton.addEventListener('click', () => {
+        brandingLogoBase64 = null;
+        clearLogoSelection();
+        handleBrandingChange();
+    });
+
+    brandingSizeSlider.addEventListener('input', () => {
+        brandingSize = parseInt(brandingSizeSlider.value, 10);
+        handleBrandingChange();
+    });
+
+    brandingOpacitySlider.addEventListener('input', () => {
+        brandingOpacity = parseFloat(brandingOpacitySlider.value);
+        handleBrandingChange();
+    });
+}
+
+function initializeBrandingEditorModal() {
+    brandingEditorOverlayElement.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        isDragging = true;
+        const rect = brandingEditorOverlayElement.getBoundingClientRect();
+        
+        dragStartOffset.x = e.clientX - rect.left;
+        dragStartOffset.y = e.clientY - rect.top;
+
+        brandingEditorOverlayElement.style.cursor = 'grabbing';
+        document.body.style.cursor = 'grabbing';
+    });
+
+    document.addEventListener('mousemove', (e) => {
+        if (!isDragging) return;
+        
+        const parentRect = brandingEditorPreviewContainer.getBoundingClientRect();
+        let newX = e.clientX - parentRect.left - dragStartOffset.x;
+        let newY = e.clientY - parentRect.top - dragStartOffset.y;
+
+        newX = Math.max(0, Math.min(newX, parentRect.width - brandingEditorOverlayElement.offsetWidth));
+        newY = Math.max(0, Math.min(newY, parentRect.height - brandingEditorOverlayElement.offsetHeight));
+        
+        brandingPosition.x = (newX / parentRect.width) * CANVAS_TARGET_SIZE;
+        brandingPosition.y = (newY / parentRect.height) * CANVAS_TARGET_SIZE;
+
+        updateBrandingEditorOverlay();
+    });
+
+    document.addEventListener('mouseup', () => {
+        if (isDragging) {
+            isDragging = false;
+            brandingEditorOverlayElement.style.cursor = 'move';
+            document.body.style.cursor = 'default';
+        }
+    });
+}
+
+function openBrandingEditorModal() {
+    const imageData = imageGenerations.get(selectedImageIndex);
+    if (!imageData || imageData.versions.length === 0) {
+        alert("Please select an image to add branding to.");
+        return;
+    }
+    const originalSrc = imageData.versions[imageData.currentIndex];
+
+    const setupEditor = () => {
+        // This function is called once the image is loaded,
+        // ensuring the container has the correct dimensions.
+        updateBrandingEditorOverlay();
+    };
+
+    // Reset previous onload handler to avoid multiple triggers
+    brandingEditorPreviewImage.onload = null;
+    // Set the new handler
+    brandingEditorPreviewImage.onload = setupEditor;
+
+    // Set the src to trigger loading
+    brandingEditorPreviewImage.src = originalSrc;
+    
+    // If the image is already cached by the browser, the 'load' event might not fire.
+    // We check the 'complete' property to handle this case and manually trigger the setup.
+    if (brandingEditorPreviewImage.complete) {
+        setupEditor();
+    }
+    
+    // Make the modal visible
+    brandingEditorModalOverlay.classList.remove('hidden');
+}
+
+function closeBrandingEditorModal() {
+    brandingEditorModalOverlay.classList.add('hidden');
+}
+
+async function handleSaveBrandingPosition() {
+    closeBrandingEditorModal();
+    // The position is already updated by the drag handler, now apply it everywhere
+    await rerenderAllThumbnails();
+    await rerenderMainPreview();
+}
+
+function clearLogoSelection() {
+    brandingLogoInput.value = '';
+    brandingLogoPreviewWrapper.classList.add('hidden');
+    brandingLogoLabel.classList.remove('hidden');
+}
+
+function updateBrandingEditorOverlay() {
+    if (!brandingLogoBase64 && !brandingText) {
+        brandingEditorOverlayElement.classList.add('hidden');
+        return;
+    }
+    
+    brandingEditorOverlayElement.classList.remove('hidden');
+    brandingEditorOverlayElement.innerHTML = '';
+    
+    let element: HTMLImageElement | HTMLSpanElement;
+
+    const previewHeight = brandingEditorPreviewContainer.clientHeight;
+
+    if (previewHeight === 0) {
+        // If container has no height yet, don't try to render.
+        // This can happen if the modal is not fully rendered.
+        return;
+    }
+
+    if (brandingLogoBase64) {
+        const img = document.createElement('img');
+        img.src = brandingLogoBase64;
+        element = img;
+        const logoHeight = previewHeight * (brandingSize / 100);
+        element.style.height = `${logoHeight}px`;
+        element.style.width = 'auto';
+    } else { // brandingText
+        const span = document.createElement('span');
+        span.textContent = brandingText;
+        element = span;
+        const fontSize = (previewHeight / 1080) * (brandingSize * 2.5);
+        element.style.fontSize = `${fontSize}px`;
+    }
+    
+    brandingEditorOverlayElement.appendChild(element);
+    brandingEditorOverlayElement.style.opacity = brandingOpacity.toString();
+    
+    const parentRect = brandingEditorPreviewContainer.getBoundingClientRect();
+    if(parentRect.width > 0) {
+        const displayX = (brandingPosition.x / CANVAS_TARGET_SIZE) * parentRect.width;
+        const displayY = (brandingPosition.y / CANVAS_TARGET_SIZE) * parentRect.height;
+        brandingEditorOverlayElement.style.left = `${displayX}px`;
+        brandingEditorOverlayElement.style.top = `${displayY}px`;
+    }
+}
+
+
+async function processImage(originalSrc: string): Promise<string> {
+    const hasBranding = brandingLogoBase64 || brandingText.trim();
+
+    if (!hasBranding) {
+        return originalSrc;
+    }
+
+    return new Promise((resolve, reject) => {
+        const sourceImage = new Image();
+        sourceImage.crossOrigin = "anonymous";
+        sourceImage.onload = () => {
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            canvas.width = CANVAS_TARGET_SIZE;
+            canvas.height = CANVAS_TARGET_SIZE;
+
+            if (!ctx) {
+                return resolve(originalSrc);
+            }
+
+            ctx.drawImage(sourceImage, 0, 0, CANVAS_TARGET_SIZE, CANVAS_TARGET_SIZE);
+            ctx.globalAlpha = brandingOpacity;
+
+            const finalize = () => resolve(canvas.toDataURL('image/png'));
+
+            if (brandingLogoBase64) {
+                const logoImage = new Image();
+                logoImage.onload = () => {
+                    const logoHeight = CANVAS_TARGET_SIZE * (brandingSize / 100);
+                    const scale = logoHeight / logoImage.height;
+                    const logoWidth = logoImage.width * scale;
+                    ctx.drawImage(logoImage, brandingPosition.x, brandingPosition.y, logoWidth, logoHeight);
+                    finalize();
+                };
+                logoImage.onerror = () => finalize();
+                logoImage.src = brandingLogoBase64;
+            } else if (brandingText.trim()) {
+                const fontSize = brandingSize * 2.5;
+                ctx.font = `600 ${fontSize}px Inter, sans-serif`;
+                ctx.textAlign = 'left';
+                ctx.textBaseline = 'top';
+
+                // Use a drop shadow for better legibility
+                ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
+                ctx.shadowOffsetX = fontSize / 20;
+                ctx.shadowOffsetY = fontSize / 20;
+                ctx.shadowBlur = fontSize / 10;
+
+                ctx.fillStyle = 'rgba(255, 255, 255, 1)';
+                ctx.fillText(brandingText, brandingPosition.x, brandingPosition.y);
+                
+                // Reset shadow properties for subsequent draws
+                ctx.shadowColor = 'transparent';
+                ctx.shadowBlur = 0;
+                ctx.shadowOffsetX = 0;
+                ctx.shadowOffsetY = 0;
+
+                finalize();
+            } else {
+                 finalize();
+            }
+        };
+        sourceImage.onerror = () => reject(new Error("Image load error for processing"));
+        sourceImage.src = originalSrc;
+    });
+}
+
+async function rerenderAllThumbnails() {
+    if (imageGenerations.size === 0) return;
+    const renderPromises = Array.from(imageGenerations.keys()).map(renderImageThumbnail);
+    await Promise.all(renderPromises);
 }

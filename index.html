@@ -46,10 +46,6 @@
             required
             ></textarea>
         </div>
-        <div class="form-group">
-            <label for="watermark-input">Add a watermark (optional):</label>
-            <input type="text" id="watermark-input" name="watermark" placeholder="e.g., Your Name or @yourhandle" />
-        </div>
         <button type="submit" id="generate-button">
           <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-zap"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
           <span>Generate</span>
@@ -86,8 +82,11 @@
                     </button>
                 </div>
                 <div class="preview-action-controls">
-                     <button id="preview-prompt-btn" class="preview-control-btn" title="View & Edit Prompt">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                     <button id="preview-edit-branding-btn" class="preview-control-btn" title="Edit Branding Placement">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
+                    </button>
+                     <button id="preview-prompt-btn" class="preview-control-btn" title="View & Edit Post Content">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg>
                     </button>
                     <button id="preview-regen-btn" class="preview-control-btn" title="Regenerate Image">
                         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
@@ -118,6 +117,42 @@
                 <span>Copy</span>
             </button>
           </div>
+        </div>
+      </section>
+
+      <section id="branding-editor" class="hidden">
+        <h2>Branding & Watermark</h2>
+        <p class="instructions">Add a text watermark or logo. Use the 'Edit' button on the preview to position it.</p>
+        <div class="branding-controls-grid">
+            <div class="form-group">
+                <label for="branding-text-input">Watermark Text</label>
+                <input type="text" id="branding-text-input" class="settings-textarea" placeholder="@yourhandle" />
+            </div>
+            <div class="form-group">
+                <label>OR Upload Logo</label>
+                <div id="branding-logo-container">
+                    <input type="file" id="branding-logo-input" name="logo" accept="image/*" class="hidden">
+                    <label for="branding-logo-input" id="branding-logo-label" class="button-secondary">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                            <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"></path>
+                            <path d="M7.646 1.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1-.708.708L8.5 2.707V11.5a.5.5 0 0 1-1 0V2.707L5.354 4.854a.5.5 0 1 1-.708-.708l3-3z"></path>
+                        </svg>
+                        <span>Upload Logo</span>
+                    </label>
+                    <div id="branding-logo-preview-wrapper" class="hidden">
+                        <img id="branding-logo-preview" src="#" alt="Logo preview">
+                        <button type="button" id="branding-remove-logo-button" title="Remove logo">×</button>
+                    </div>
+                </div>
+            </div>
+            <div class="form-group">
+                <label for="branding-size-slider">Size</label>
+                <input type="range" id="branding-size-slider" min="4" max="50" value="8" step="1">
+            </div>
+            <div class="form-group">
+                <label for="branding-opacity-slider">Opacity</label>
+                <input type="range" id="branding-opacity-slider" min="0.1" max="1" value="0.7" step="0.05">
+            </div>
         </div>
       </section>
     </main>
@@ -189,6 +224,25 @@
         </div>
         <div class="modal-footer">
             <button id="regenerate-with-prompt-button" class="button-primary">Save & Regenerate</button>
+        </div>
+      </div>
+    </div>
+    
+    <div id="branding-editor-modal-overlay" class="modal-overlay hidden">
+      <div id="branding-editor-modal" class="modal-content" role="dialog" aria-modal="true" aria-labelledby="branding-editor-title">
+        <div class="modal-header">
+          <h2 id="branding-editor-title">Edit Branding Placement</h2>
+          <button id="close-branding-editor-button" title="Close Editor">&times;</button>
+        </div>
+        <div class="modal-body branding-editor-body">
+            <p class="instructions">Click and drag your logo or watermark to the desired position.</p>
+            <div id="branding-editor-preview-container">
+                <img id="branding-editor-preview-image" src="" alt="Branding preview" />
+                <div id="branding-editor-overlay-element" draggable="false"></div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button id="save-branding-position-button" class="button-primary">Done</button>
         </div>
       </div>
     </div>
