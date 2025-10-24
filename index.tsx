@@ -20,6 +20,7 @@ let isInitialGeneration = false;
 
 // --- Branding State ---
 let brandingText: string = '';
+let brandingTextColor: 'white' | 'black' = 'white';
 let brandingLogoBase64: string | null = null;
 let brandingSize: number = 8;
 let brandingOpacity: number = 0.7;
@@ -862,6 +863,17 @@ function initializeBrandingControls() {
         handleBrandingChange();
     });
 
+    const brandingColorRadios = document.querySelectorAll<HTMLInputElement>('input[name="branding-color"]');
+    brandingColorRadios.forEach(radio => {
+        radio.addEventListener('change', () => {
+            const checkedRadio = document.querySelector<HTMLInputElement>('input[name="branding-color"]:checked');
+            if (checkedRadio) {
+                brandingTextColor = checkedRadio.value as 'white' | 'black';
+                handleBrandingChange();
+            }
+        });
+    });
+
     brandingLogoInput.addEventListener('change', (e) => {
         const target = e.target as HTMLInputElement;
         const file = target.files?.[0];
@@ -1018,6 +1030,12 @@ function updateBrandingEditorOverlay() {
         element = span;
         const fontSize = (previewHeight / 1080) * (brandingSize * 2.5);
         element.style.fontSize = `${fontSize}px`;
+        element.style.color = brandingTextColor;
+        if (brandingTextColor === 'white') {
+            element.style.textShadow = '1px 1px 3px rgba(0,0,0,0.7)';
+        } else {
+            element.style.textShadow = '1px 1px 3px rgba(255,255,255,0.7)';
+        }
     }
     
     brandingEditorOverlayElement.appendChild(element);
@@ -1076,12 +1094,17 @@ async function processImage(originalSrc: string): Promise<string> {
                 ctx.textBaseline = 'top';
 
                 // Use a drop shadow for better legibility
-                ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
+                if (brandingTextColor === 'white') {
+                    ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
+                    ctx.fillStyle = 'rgba(255, 255, 255, 1)';
+                } else { // black
+                    ctx.shadowColor = 'rgba(255, 255, 255, 0.8)';
+                    ctx.fillStyle = 'rgba(0, 0, 0, 1)';
+                }
                 ctx.shadowOffsetX = fontSize / 20;
                 ctx.shadowOffsetY = fontSize / 20;
                 ctx.shadowBlur = fontSize / 10;
 
-                ctx.fillStyle = 'rgba(255, 255, 255, 1)';
                 ctx.fillText(brandingText, brandingPosition.x, brandingPosition.y);
                 
                 // Reset shadow properties for subsequent draws

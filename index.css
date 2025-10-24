@@ -703,6 +703,45 @@ header p {
     justify-content: center;
 }
 
+.color-selector {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  height: 44px; /* Align with input height approx */
+}
+
+.color-selector input[type="radio"] {
+  display: none; /* Hide the actual radio button */
+}
+
+.color-swatch {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  cursor: pointer;
+  border: 2px solid var(--border-color);
+  transition: transform 0.2s ease, border-color 0.2s ease;
+  position: relative;
+}
+
+.color-swatch:hover {
+  transform: scale(1.1);
+}
+
+#color-white + .color-swatch {
+    background-color: #ffffff;
+}
+
+#color-black + .color-swatch {
+    background-color: #000000;
+}
+
+.color-selector input[type="radio"]:checked + .color-swatch {
+  border-color: var(--primary-color);
+  box-shadow: 0 0 5px var(--primary-color);
+}
+
+
 .hidden {
   display: none !important;
 }
@@ -802,8 +841,6 @@ header p {
 #branding-editor-overlay-element span {
     font-family: Inter, sans-serif;
     font-weight: 600;
-    color: white;
-    text-shadow: 1px 1px 3px rgba(0,0,0,0.7);
     white-space: nowrap;
     pointer-events: none;
     font-size: 32px;
