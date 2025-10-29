@@ -345,6 +345,7 @@ async function generatePostContent(topic: string): Promise<PostContent[]> {
                     required: ['image_prompt', 'header_text', 'subheader_text'],
                 }
             },
+            thinkingConfig: { thinkingBudget: 32768 },
         },
     });
     const json = JSON.parse(response.text);
@@ -362,6 +363,7 @@ async function generateCaption(postContent: PostContent): Promise<string> {
         config: {
             temperature: parseFloat(localStorage.getItem('temperature') || '0.9'),
             systemInstruction: localStorage.getItem('captionPrompt') || DEFAULT_CAPTION_SYSTEM_INSTRUCTION,
+            thinkingConfig: { thinkingBudget: 32768 },
         },
     });
     return response.text.trim();
